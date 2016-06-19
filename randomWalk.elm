@@ -17,8 +17,14 @@ main =
         }
 
 
-screenSize =
-    ( 960, 540 )
+canvasWidth : Int
+canvasWidth =
+    960
+
+
+canvasHeight : Int
+canvasHeight =
+    540
 
 
 type alias Position =
@@ -26,7 +32,9 @@ type alias Position =
 
 
 type alias Model =
-    Position
+    { currentPosition : Position
+    , previousPositions : List Position
+    }
 
 
 type Direction
@@ -48,8 +56,11 @@ type Msg
 
 init : ( Model, Cmd Msg )
 init =
-    ( { x = truncate <| (fst screenSize) / 2
-      , y = truncate <| (snd screenSize) / 2
+    ( { currentPosition =
+            { x = truncate <| (toFloat canvasWidth) / 2.0
+            , y = truncate <| (toFloat canvasHeight) / 2.0
+            }
+      , previousPositions = []
       }
     , Cmd.none
     )
@@ -64,7 +75,11 @@ update msg model =
             )
 
         RandomDirection n ->
-            ( wander (toDirection n) model, Cmd.none )
+            ( { currentPosition = wander (toDirection n) model.currentPosition
+              , previousPositions = model.currentPosition :: model.previousPositions
+              }
+            , Cmd.none
+            )
 
 
 subscriptions : Model -> Sub Msg
@@ -74,28 +89,30 @@ subscriptions _ =
 
 view : Model -> Html.Html Msg
 view model =
-    Html.text <| toString model
+    --    Html.text <| toString model
+    Element.toHtml
+        <| Collage.collage canvasWidth
+            canvasHeight
+            [ Collage.traced Collage.defaultLine
+                (Collage.path <| List.map floatify (model.currentPosition :: model.previousPositions))
+            ]
 
 
-
---Collage.traced Collage.defaultLine
---    (Collage.segment ( 0.0, 0.0 ) ( 300.0, 300.0 ))
-
-
-wander : Direction -> Model -> Model
-wander direction model =
-    offset model direction |> clampToCanvasBoundary
+floatify : Position -> ( Float, Float )
+floatify position =
+    ( toFloat position.x, toFloat position.y )
 
 
-clampToCanvasBoundary : Model -> Model
-clampToCanvasBoundary model =
-    let
-        ( screenWidth, screenHeight ) =
-            screenSize
-    in
-        { x = clamp 0 screenWidth model.x
-        , y = clamp 0 screenHeight model.y
-        }
+wander : Direction -> Position -> Position
+wander direction position =
+    offset position direction |> clampToCanvasBoundary
+
+
+clampToCanvasBoundary : Position -> Position
+clampToCanvasBoundary position =
+    { x = clamp 0 canvasWidth position.x
+    , y = clamp 0 canvasHeight position.y
+    }
 
 
 offset : Position -> Direction -> Position

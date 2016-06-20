@@ -64,6 +64,10 @@ type Msg
     | Tick Time.Time
 
 
+trailSize =
+    500
+
+
 init : ( Model, Cmd Msg )
 init =
     -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
@@ -142,7 +146,7 @@ update msg model =
         RandomDirection n ->
             let
                 ( trail, trailSet ) =
-                    extendTrailToCurrentPosition model 100
+                    extendTrailToCurrentPosition model trailSize
             in
                 ( { currentPosition = wander (toDirection n) model
                   , previousPositionsTrail = trail
@@ -153,11 +157,11 @@ update msg model =
 
 
 movementRate =
-    10
+    15
 
 
 tickEveryMilliseconds =
-    50
+    33
 
 
 subscriptions : Model -> Sub Msg
@@ -239,9 +243,25 @@ wander direction model =
                 < canvasMaxY
     in
         if positionCrossingTrail || not positionInBounds then
-            model.currentPosition
+            -- If all routes block, just cross the trail anyway, otherwise avoid doing so
+            if positionInBounds && allRoutesBlocked model.currentPosition model.previousPositions then
+                nextPosition
+            else
+                model.currentPosition
         else
             nextPosition
+
+
+allRoutesBlocked : Position -> TrailSet -> Bool
+allRoutesBlocked position trailSet =
+    let
+        offsetFromCurrent =
+            offset position
+
+        positionOffsets =
+            List.map offsetFromCurrent [ Up, Down, Left, Right, UpLeft, UpRight, DownLeft, DownRight ]
+    in
+        List.any (\pos -> Set.member (asPositionKey pos) trailSet) positionOffsets
 
 
 offset : Position -> Direction -> Position

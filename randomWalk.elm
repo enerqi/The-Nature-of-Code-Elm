@@ -1,11 +1,13 @@
 module Main exposing (..)
 
 import Collage
+import Color
 import Element exposing (toHtml)
 import Html.App as App
 import Html
 import Random
 import Set
+import Set exposing (Set)
 import Time
 
 
@@ -18,23 +20,30 @@ main =
         }
 
 
-canvasWidth : Int
-canvasWidth =
-    960
 
-
-canvasHeight : Int
-canvasHeight =
-    540
+-- MODEL
 
 
 type alias Position =
     { x : Int, y : Int }
 
 
+type alias PositionKey =
+    ( Int, Int )
+
+
+type alias TrailSet =
+    Set PositionKey
+
+
+type alias Trail =
+    List Position
+
+
 type alias Model =
     { currentPosition : Position
-    , previousPositions : List Position
+    , previousPositionsTrail : Trail
+    , previousPositions : TrailSet
     }
 
 
@@ -58,14 +67,68 @@ type Msg
 init : ( Model, Cmd Msg )
 init =
     -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
-    ( { currentPosition =
-            { x = 0
-            , y = 0
-            }
-      , previousPositions = []
+    ( { currentPosition = { x = 0, y = 0 }
+      , previousPositionsTrail = []
+      , previousPositions = Set.empty
       }
     , Cmd.none
     )
+
+
+
+-- VIEW
+
+
+canvasWidth : Int
+canvasWidth =
+    960
+
+
+canvasMaxX =
+    480
+
+
+canvasMinX =
+    -480
+
+
+canvasHeight : Int
+canvasHeight =
+    540
+
+
+canvasMaxY =
+    270
+
+
+canvasMinY =
+    -270
+
+
+view : Model -> Html.Html Msg
+view model =
+    let
+        --Debug.log "model" <| toString model
+        defaultLineStyle =
+            Collage.defaultLine
+    in
+        -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
+        Element.toHtml
+            <| Collage.collage canvasWidth
+                canvasHeight
+                [ Collage.traced
+                    { defaultLineStyle
+                        | color = Color.green
+                        , width = (toFloat movementRate) / 2.0
+                        , join = Collage.Smooth
+                        , cap = Collage.Round
+                    }
+                    (Collage.path <| List.map (\{ x, y } -> ( toFloat x, toFloat y )) (model.currentPosition :: model.previousPositionsTrail))
+                ]
+
+
+
+-- UPDATE
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -77,93 +140,136 @@ update msg model =
             )
 
         RandomDirection n ->
-            ( { currentPosition = wander (toDirection n) model.currentPosition
-              , previousPositions = positionsHistoryUpdate model.previousPositions model.currentPosition 100
-              }
-            , Cmd.none
-            )
+            let
+                ( trail, trailSet ) =
+                    extendTrailToCurrentPosition model 100
+            in
+                ( { currentPosition = wander (toDirection n) model
+                  , previousPositionsTrail = trail
+                  , previousPositions = trailSet
+                  }
+                , Cmd.none
+                )
+
+
+movementRate =
+    10
+
+
+tickEveryMilliseconds =
+    50
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Time.every (500 * Time.millisecond) Tick
+    Time.every (tickEveryMilliseconds * Time.millisecond) Tick
 
 
-view : Model -> Html.Html Msg
-view model =
+asPositionKey : Position -> PositionKey
+asPositionKey { x, y } =
+    ( x, y )
+
+
+extendTrailToCurrentPosition : Model -> Int -> ( Trail, TrailSet )
+extendTrailToCurrentPosition model maxTrailSize =
+    if not <| Set.member (asPositionKey model.currentPosition) model.previousPositions then
+        let
+            trailSize =
+                List.length model.previousPositionsTrail
+
+            newTrailSize =
+                trailSize + 1
+
+            currentPositionKey =
+                asPositionKey model.currentPosition
+        in
+            if newTrailSize > maxTrailSize then
+                let
+                    nextTrail =
+                        -- how do we make this faster, getting the last element in a list is slow - Queue as a Dequeue/Stack stand in?
+                        model.currentPosition :: (List.take (maxTrailSize - 1) model.previousPositionsTrail)
+
+                    nextTrailSet =
+                        removeTrailRearFromSet model.previousPositionsTrail model.previousPositions
+                in
+                    ( nextTrail, nextTrailSet )
+            else
+                ( model.currentPosition :: model.previousPositionsTrail
+                , Set.insert currentPositionKey model.previousPositions
+                )
+    else
+        ( model.previousPositionsTrail, model.previousPositions )
+
+
+removeTrailRearFromSet : Trail -> TrailSet -> TrailSet
+removeTrailRearFromSet trail trailSet =
     let
-        _ =
-            -- Set requires comparable, so toString the record
-            -- includes numbers, characters, strings, lists of comparable things, and tuples of comparable things
-            Debug.log "model" (Set.fromList <| List.map toString model.previousPositions)
+        trailSize =
+            List.length trail
+
+        trailRear =
+            List.drop (trailSize - 1) trail
+                |> List.head
     in
-        -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
-        Element.toHtml
-            <| Collage.collage canvasWidth
-                canvasHeight
-                [ Collage.traced Collage.defaultLine
-                    (Collage.path <| List.map floatify (model.currentPosition :: model.previousPositions))
-                ]
+        case trailRear of
+            Just position ->
+                Set.remove (asPositionKey position) trailSet
+
+            Nothing ->
+                trailSet
 
 
-positionsHistoryUpdate : List Position -> Position -> Int -> List Position
-positionsHistoryUpdate positions newPosition maxHistorySize =
+wander : Direction -> Model -> Position
+wander direction model =
     let
-        historySize =
-            List.length positions
+        nextPosition =
+            offset model.currentPosition direction
 
-        newHistorySize =
-            historySize + 1
+        positionCrossingTrail =
+            Set.member (asPositionKey nextPosition) model.previousPositions
+
+        positionInBounds =
+            nextPosition.x
+                >= canvasMinX
+                && nextPosition.x
+                < canvasMaxX
+                && nextPosition.y
+                >= canvasMinY
+                && nextPosition.y
+                < canvasMaxY
     in
-        if newHistorySize > maxHistorySize then
-            newPosition :: (List.take (maxHistorySize - 1) positions)
+        if positionCrossingTrail || not positionInBounds then
+            model.currentPosition
         else
-            newPosition :: positions
-
-
-floatify : Position -> ( Float, Float )
-floatify position =
-    ( toFloat position.x, toFloat position.y )
-
-
-wander : Direction -> Position -> Position
-wander direction position =
-    offset position direction |> clampToCanvasBoundary
-
-
-clampToCanvasBoundary : Position -> Position
-clampToCanvasBoundary position =
-    { x = clamp 0 canvasWidth position.x
-    , y = clamp 0 canvasHeight position.y
-    }
+            nextPosition
 
 
 offset : Position -> Direction -> Position
 offset position dir =
     case dir of
         Up ->
-            { position | y = position.y - 1 }
+            { position | y = position.y - movementRate }
 
         Down ->
-            { position | y = position.y + 1 }
+            { position | y = position.y + movementRate }
 
         Left ->
-            { position | x = position.x - 1 }
+            { position | x = position.x - movementRate }
 
         Right ->
-            { position | x = position.x + 1 }
+            { position | x = position.x + movementRate }
 
         UpLeft ->
-            { x = position.x - 1, y = position.y - 1 }
+            { x = position.x - movementRate, y = position.y - movementRate }
 
         UpRight ->
-            { x = position.x + 1, y = position.y - 1 }
+            { x = position.x + movementRate, y = position.y - movementRate }
 
         DownLeft ->
-            { x = position.x - 1, y = position.y + 1 }
+            { x = position.x - movementRate, y = position.y + movementRate }
 
         DownRight ->
-            { x = position.x + 1, y = position.y + 1 }
+            { x = position.x + movementRate, y = position.y + movementRate }
 
         None ->
             position

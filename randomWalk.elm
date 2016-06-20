@@ -190,7 +190,7 @@ extendTrailToCurrentPosition model maxTrailSize =
             if newTrailSize > maxTrailSize then
                 let
                     nextTrail =
-                        -- how do we make this faster, getting the last element in a list is slow - Queue as a Dequeue/Stack stand in?
+                        -- how do we make this faster -> Implement our own circular buffer on top of arrays
                         model.currentPosition :: (List.take (maxTrailSize - 1) model.previousPositionsTrail)
 
                     nextTrailSet =
@@ -212,6 +212,7 @@ removeTrailRearFromSet trail trailSet =
             List.length trail
 
         trailRear =
+            -- how do we make this faster -> Implement our own circular buffer on top of arrays
             List.drop (trailSize - 1) trail
                 |> List.head
     in

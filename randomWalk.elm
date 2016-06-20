@@ -5,6 +5,7 @@ import Element exposing (toHtml)
 import Html.App as App
 import Html
 import Random
+import Set
 import Time
 
 
@@ -56,9 +57,10 @@ type Msg
 
 init : ( Model, Cmd Msg )
 init =
+    -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
     ( { currentPosition =
-            { x = truncate <| (toFloat canvasWidth) / 2.0
-            , y = truncate <| (toFloat canvasHeight) / 2.0
+            { x = 0
+            , y = 0
             }
       , previousPositions = []
       }
@@ -76,7 +78,7 @@ update msg model =
 
         RandomDirection n ->
             ( { currentPosition = wander (toDirection n) model.currentPosition
-              , previousPositions = model.currentPosition :: model.previousPositions
+              , previousPositions = positionsHistoryUpdate model.previousPositions model.currentPosition 100
               }
             , Cmd.none
             )
@@ -89,13 +91,34 @@ subscriptions _ =
 
 view : Model -> Html.Html Msg
 view model =
-    --    Html.text <| toString model
-    Element.toHtml
-        <| Collage.collage canvasWidth
-            canvasHeight
-            [ Collage.traced Collage.defaultLine
-                (Collage.path <| List.map floatify (model.currentPosition :: model.previousPositions))
-            ]
+    let
+        _ =
+            -- Set requires comparable, so toString the record
+            -- includes numbers, characters, strings, lists of comparable things, and tuples of comparable things
+            Debug.log "model" (Set.fromList <| List.map toString model.previousPositions)
+    in
+        -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
+        Element.toHtml
+            <| Collage.collage canvasWidth
+                canvasHeight
+                [ Collage.traced Collage.defaultLine
+                    (Collage.path <| List.map floatify (model.currentPosition :: model.previousPositions))
+                ]
+
+
+positionsHistoryUpdate : List Position -> Position -> Int -> List Position
+positionsHistoryUpdate positions newPosition maxHistorySize =
+    let
+        historySize =
+            List.length positions
+
+        newHistorySize =
+            historySize + 1
+    in
+        if newHistorySize > maxHistorySize then
+            newPosition :: (List.take (maxHistorySize - 1) positions)
+        else
+            newPosition :: positions
 
 
 floatify : Position -> ( Float, Float )

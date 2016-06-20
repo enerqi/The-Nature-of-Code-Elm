@@ -11,6 +11,21 @@ import Set exposing (Set)
 import Time
 
 
+{-|
+
+Program that draws the trail of a random walk to the 2D browser canvas. The random walker avoids crossing the trail unless it has no choice.
+
+# Trails
+@docs trailSize, movementRate, tickEveryMilliseconds
+
+A small movement rate will result in thin lines and a hard to see trail as the trail coordinates are 1:1 mapped to screen pixels.
+
+# Canvas Size & Boundary
+@docs canvasWidth, canvasMaxX, canvasMinX, canvasHeight, canvasMaxY, canvasMinY
+
+This canvas API puts (0,0) at the centre of the canvas.
+
+-}
 main =
     App.program
         { init = init
@@ -70,7 +85,6 @@ trailSize =
 
 init : ( Model, Cmd Msg )
 init =
-    -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
     ( { currentPosition = { x = 0, y = 0 }
       , previousPositionsTrail = []
       , previousPositions = Set.empty
@@ -116,7 +130,6 @@ view model =
         defaultLineStyle =
             Collage.defaultLine
     in
-        -- Note the Collage API has Y going up and (0,0) the origin at the centre of the canvas
         Element.toHtml
             <| Collage.collage canvasWidth
                 canvasHeight
